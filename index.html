@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>رزرو گیم‌نت — ارسال SMS</title>
+  <style>
+    :root{--bg:#071025;--card:#0b1220;--accent:#7c3aed;--muted:#94a3b8}
+    body{font-family:iransans, Tahoma, Arial; background:linear-gradient(180deg,#07102a 0%, #061025 100%); color:#e6eef8; margin:0; padding:24px}
+    .wrap{max-width:900px;margin:30px auto;padding:22px;background:rgba(255,255,255,0.03);border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    h1{margin:0 0 8px;font-size:24px;text-align:center}
+    p.lead{color:var(--muted);text-align:center;margin:0 0 18px}
+    form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit}
+    .full{grid-column:1/-1}
+    .actions{display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:6px}
+    button{background:var(--accent);color:white;padding:10px 14px;border:none;border-radius:10px;cursor:pointer;font-weight:600}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .note{font-size:13px;color:var(--muted);margin-top:8px}
+    @media(max-width:720px){form{grid-template-columns:1fr} .actions{justify-content:stretch}}
+
+    /* simple modal */
+    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);visibility:hidden;opacity:0;transition:opacity .18s}
+    .modal.show{visibility:visible;opacity:1}
+    .modal .card{background:#071225;padding:18px;border-radius:10px;max-width:420px;width:90%;text-align:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>رزرو میز در گیم‌نت</h1>
+    <p class="lead">فرم زیر را پر کنید — بعد از ارسال، پیام اس‌ام‌اس برای مدیریت آماده می‌شود.</p>
+
+    <form id="reserveForm">
+      <div>
+        <label for="name">نام و نام خانوادگی</label>
+        <input id="name" name="name" type="text" placeholder="مثال: علی رضایی" required />
+      </div>
+
+      <div>
+        <label for="phone">شماره تماس</label>
+        <input id="phone" name="phone" type="tel" placeholder="09xxxxxxxx" required />
+      </div>
+
+      <div>
+        <label for="date">تاریخ رزرو</label>
+        <input id="date" name="date" type="date" required />
+      </div>
+
+      <div>
+        <label for="time">ساعت شروع</label>
+        <input id="time" name="time" type="time" required />
+      </div>
+
+      <div>
+        <label for="duration">مدت (ساعت)</label>
+        <select id="duration" name="duration">
+          <option value="1">1 ساعت</option>
+          <option value="2">2 ساعت</option>
+          <option value="3">3 ساعت</option>
+          <option value="4">4 ساعت</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="seats">تعداد صندلی</label>
+        <input id="seats" name="seats" type="number" min="1" max="10" value="1" required />
+      </div>
+
+      <div class="full">
+        <label for="game">بازی / توضیحات</label>
+        <input id="game" name="game" type="text" placeholder="مثال: CS:GO یا توضیحات اضافی" />
+      </div>
+
+      <div class="full">
+        <label for="notes">یادداشت (اختیاری)</label>
+        <textarea id="notes" name="notes" rows="3" placeholder="درخواست خاص، مثلاً صندلی کنار هم"></textarea>
+      </div>
+
+      <div class="full actions">
+        <button type="button" id="previewBtn" class="secondary">پیش‌نمایش</button>
+        <button type="submit">ارسال و آماده‌سازی SMS</button>
+      </div>
+
+      <p class="note full">توضیح: لینک SMS روی موبایل پیام‌رسان گوشی را باز می‌کند. در دسکتاپ ممکن است عمل نکند.</p>
+    </form>
+  </div>
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="card">
+      <h3 id="modalTitle">پیام اس‌ام‌اس آماده شد</h3>
+      <p id="modalBody">اپ پیام‌رسان گوشی شما باز شد و متن پیام پر شده است. اگر اس‌ام‌اس ارسال نشد، متن پیام را کپی کرده و به شماره مدیریت ارسال کنید.</p>
+      <pre id="smsText" style="text-align:right;white-space:pre-wrap;background:#031226;color:#dbe9ff;padding:10px;border-radius:6px;margin-top:10px;font-size:13px;direction:ltr"></pre>
+      <div style="margin-top:12px;display:flex;gap:10px;justify-content:center">
+        <button id="modalOk">فهمیدم</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // شماره اس‌ام‌اس مدیریت (بدون صفر ابتدای داخلی، با کد کشور)
+    const SMS_NUMBER = '+989381455579';
+
+    const form = document.getElementById('reserveForm');
+    const previewBtn = document.getElementById('previewBtn');
+    const modal = document.getElementById('modal');
+    const modalOk = document.getElementById('modalOk');
+    const smsTextPre = document.getElementById('smsText');
+
+    function gatherData(){
+      const fd = new FormData(form);
+      const obj = {};
+      for (const [k,v] of fd.entries()) obj[k]=v;
+      return obj;
+    }
+
+    previewBtn.addEventListener('click', ()=>{
+      const d = gatherData();
+      let text = `نام: ${d.name}\nشماره: ${d.phone}\nتاریخ: ${d.date} ${d.time}\nمدت: ${d.duration} ساعت\nصندلی: ${d.seats}\nبازی: ${d.game}\nیادداشت: ${d.notes}`;
+      alert(text);
+    });
+
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const data = gatherData();
+
+      // متن پیام (فارسی)
+      const plainText = `رزرو جدید\nنام: ${data.name}\nشماره: ${data.phone}\nتاریخ: ${data.date} ${data.time}\nمدت: ${data.duration} ساعت\nصندلی: ${data.seats}\nبازی: ${data.game}\nیادداشت: ${data.notes}`;
+
+      // برخی دستگاه‌ها از پارامتر body با ?body= پشتیبانی می‌کنند، برخی با &body=
+      // ساخت لینک sms (سعی می‌کنیم هر دو حالت را امتحان کنیم)
+      const encoded = encodeURIComponent(plainText);
+      const smsLink1 = `sms:${SMS_NUMBER}?body=${encoded}`;   // اغلب اندروید
+      const smsLink2 = `sms:${SMS_NUMBER}&body=${encoded}`;   // برخی دستگاه‌ها
+
+      // نمایش متن پیام در مودال (در صورت نیاز به کپی)
+      smsTextPre.textContent = plainText;
+
+      // باز کردن لینک (سعی اول smsLink1، بعد smsLink2)
+      // window.open برای موبایل معمولاً اپ پیام‌رسان را باز می‌کند
+      const opened = window.open(smsLink1, '_blank') || window.open(smsLink2, '_blank');
+
+      // اگر باز نشد (دسکتاپ یا محدودیت)، به صورت fallback رفتار می‌کنیم:
+      // مودال را نشان می‌دهیم که کاربر متن را کپی کند
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden','false');
+    });
+
+    modalOk.addEventListener('click', ()=>{
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden','true');
+      form.reset();
+    });
+  </script>
+</body>
+</html>
